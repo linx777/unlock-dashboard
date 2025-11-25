@@ -2,13 +2,37 @@
 
 import Image from "next/image";
 import { useState, useEffect } from "react";
+import ThemeToggle from "../components/ThemeToggle";
+import VerticalMenu from "../components/VerticalMenu";
+import ChartsPage from "../components/ChartsPage";
 
 export default function Dashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number } | null>(null);
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
-  const [sellPressure, setSellPressure] = useState(100); // 1-100%
-  const [executionTime, setExecutionTime] = useState(30); // 1-30 days
+  const [sellPressure, setSellPressure] = useState(0); // 0-100%
+  const [executionTime, setExecutionTime] = useState(0); // 0-30 days
+  const [tokenLabel, setTokenLabel] = useState('Token value unlock');
+  const [tokenValue, setTokenValue] = useState('$314 Million');
+  const [isDark, setIsDark] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [activeMenuItem, setActiveMenuItem] = useState(0);
+  const [hoveredBuybackTab, setHoveredBuybackTab] = useState(false);
+
+  // Update token value display to show 134 million
+  useEffect(() => {
+    if (tokenLabel === 'Token value unlock') {
+      setTokenValue('$134 Million');
+    }
+  }, [tokenLabel]);
+
+  const toggleTokenLabel = () => {
+    setTokenLabel(prev => {
+      const newLabel = prev === 'Token value unlock' ? 'Token size unlock' : 'Token value unlock';
+      setTokenValue(newLabel === 'Token size unlock' ? '2.66% of total supply' : '$314 Million');
+      return newLabel;
+    });
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -16,6 +40,25 @@ export default function Dashboard() {
     }, 60000); // Update every minute
 
     return () => clearInterval(timer);
+  }, []);
+
+  // Listen for theme changes
+  useEffect(() => {
+    const checkTheme = () => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    };
+
+    // Check initial theme
+    checkTheme();
+
+    // Watch for theme changes
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    return () => observer.disconnect();
   }, []);
 
   // Target: November 29, 2025 2PM UTC
@@ -50,43 +93,70 @@ export default function Dashboard() {
 
   // Calculate displayed stats based on selected cell or defaults
   const getDisplayStats = () => {
+    // Calculate circulating supply based on sliders
+    const tokenUnlock = 134; // 134M tokens to unlock
+    const baseSupply = 79.46; // Base circulating supply in millions
+
+    // Calculate additional supply based on sliders
+    let additionalSupply = 0;
+    if (executionTime > 0) {
+      const dailyUnlock = tokenUnlock / executionTime;
+      additionalSupply = dailyUnlock * (sellPressure / 100);
+    }
+
+    const newSupplyNum = baseSupply + additionalSupply;
+
     if (selectedCell) {
-      const revenue = (5.50 + (selectedCell.col / 28) * (8.00 - 5.50)).toFixed(3);
-      const price = (50 - (selectedCell.row / 17) * (50 - 34)).toFixed(2);
-      const intensity = (selectedCell.row + selectedCell.col) / (18 + 29 - 2);
-      const years = (1.2 + intensity * 0.8).toFixed(2);
-      const supply = (79.46 + Math.random() * 0.5).toFixed(2); // Sample calculation
+      const revenueNum = 5.50 + (selectedCell.col / 28) * (8.00 - 5.50);
+      const priceNum = 50 - (selectedCell.row / 17) * (50 - 34);
+
+      // Calculate years to buyback using formula: (Price × Circulating Supply) / (Daily Revenue × 365)
+      const yearsNum = (priceNum * newSupplyNum) / (revenueNum * 365);
 
       return {
-        revenue: `$${revenue}M`,
-        price: `$${price}`,
-        supply: `${supply}M`,
-        years: `${years}yrs`
+        revenue: `$${revenueNum.toFixed(3)}M`,
+        price: `$${priceNum.toFixed(2)}`,
+        supply: `${newSupplyNum.toFixed(2)}M`,
+        years: `${yearsNum.toFixed(2)}yrs`
       };
     }
 
     // Default values
+    const defaultRevenue = 6.803;
+    const defaultPrice = 41.49;
+    const defaultYears = (defaultPrice * newSupplyNum) / (defaultRevenue * 365);
+
     return {
       revenue: '$6.803M',
       price: '$41.49',
-      supply: '79.46M',
-      years: '1.33yrs'
+      supply: `${newSupplyNum.toFixed(2)}M`,
+      years: `${defaultYears.toFixed(2)}yrs`
     };
   };
 
   const displayStats = getDisplayStats();
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden">
+    <div className="relative w-screen min-h-screen overflow-y-auto overflow-x-hidden">
+      {/* Theme Toggle */}
+      <ThemeToggle />
+
+      {/* Vertical Menu */}
+      <VerticalMenu onMenuChange={setActiveMenuItem} />
+
       {/* Full-screen background image */}
-      <Image
-        src="/dashboard-bg.png"
-        alt="Dashboard Background"
-        fill
-        style={{ objectFit: 'cover' }}
-        priority
-        quality={100}
-      />
+      <div className="fixed inset-0 -z-10">
+        <Image
+          src={isDark ? "/dark-mode-bg-v2.jpg" : "/dashboard-bg.png"}
+          alt="Dashboard Background"
+          fill
+          style={{ objectFit: 'cover' }}
+          priority
+          quality={100}
+          unoptimized={true}
+          key={isDark ? 'dark' : 'light'}
+        />
+      </div>
 
       {/* Content container */}
       <div className="absolute top-8 left-1/2 transform -translate-x-1/2 flex flex-col gap-12">
@@ -101,9 +171,9 @@ export default function Dashboard() {
                 background: 'linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0))',
               }}
             />
-            <div className="absolute top-0 right-0 transform -translate-y-full pb-1">
+            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full pb-1">
               <span className="text-xs font-[family-name:var(--font-cormorant)]" style={{ color: '#2E3837', opacity: 0.6 }}>
-                Time to unlock till 29 Nov. 1 dot represents an hour.
+                Time to unlock till 29 Nov. A dot represents an hour.
               </span>
             </div>
           </div>
@@ -153,16 +223,58 @@ export default function Dashboard() {
         </div>
 
         {/* Sliders */}
-        <div className="flex gap-8">
+        <div className="flex gap-4 justify-center">
+          {/* Token Value Display */}
+          <div>
+            {/* Label */}
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-lg font-[family-name:var(--font-cormorant)]" style={{ color: '#2E3837' }}>
+                {tokenLabel}
+              </span>
+              <button
+                onClick={toggleTokenLabel}
+                className="flex items-center justify-center rounded-full cursor-pointer transition-all hover:scale-110"
+                style={{
+                  width: '20px',
+                  height: '20px',
+                  border: '0.5px solid white',
+                  backgroundColor: 'transparent'
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="#ffffff" viewBox="0 0 256 256">
+                  <path d="M224,48V152a16,16,0,0,1-16,16H99.31l10.35,10.34a8,8,0,0,1-11.32,11.32l-24-24a8,8,0,0,1,0-11.32l24-24a8,8,0,0,1,11.32,11.32L99.31,152H208V48H96v8a8,8,0,0,1-16,0V48A16,16,0,0,1,96,32H208A16,16,0,0,1,224,48ZM168,192a8,8,0,0,0-8,8v8H48V104H156.69l-10.35,10.34a8,8,0,0,0,11.32,11.32l24-24a8,8,0,0,0,0-11.32l-24-24a8,8,0,0,0-11.32,11.32L156.69,88H48a16,16,0,0,0-16,16V208a16,16,0,0,0,16,16H160a16,16,0,0,0,16-16v-8A8,8,0,0,0,168,192Z"></path>
+                </svg>
+              </button>
+            </div>
+
+            {/* Number display aligned to bottom */}
+            <div className="relative flex items-end" style={{ height: '48px' }}>
+              {tokenLabel === 'Token size unlock' ? (
+                <div className="flex flex-col justify-end" style={{ transform: 'translateY(5px)' }}>
+                  <span className="text-3xl font-[family-name:var(--font-inter)] font-semibold leading-none" style={{ color: '#2E3837' }}>
+                    2.66%
+                  </span>
+                  <span className="text-xs font-[family-name:var(--font-inter)]" style={{ color: '#2E3837', opacity: 0.7 }}>
+                    of total supply
+                  </span>
+                </div>
+              ) : (
+                <span className="text-3xl font-[family-name:var(--font-inter)] font-semibold" style={{ color: '#2E3837', transform: 'translateY(5px)' }}>
+                  {tokenValue}
+                </span>
+              )}
+            </div>
+          </div>
+
           {/* Sell Pressure Slider */}
-          <div className="flex-1">
+          <div style={{ width: '220px' }}>
             {/* Value label */}
             <div className="mb-2 flex items-center gap-2">
               <span className="text-lg font-[family-name:var(--font-cormorant)]" style={{ color: '#2E3837' }}>
                 Sell pressure
               </span>
               <span className="text-base font-[family-name:var(--font-inter)] font-semibold" style={{ color: '#2E3837' }}>
-                {sellPressure}% Sold
+                {sellPressure}%
               </span>
             </div>
 
@@ -171,7 +283,7 @@ export default function Dashboard() {
               {/* Slider input - full area */}
               <input
                 type="range"
-                min="1"
+                min="0"
                 max="100"
                 value={sellPressure}
                 onChange={(e) => setSellPressure(Number(e.target.value))}
@@ -197,21 +309,15 @@ export default function Dashboard() {
                   top: '24px',
                   height: '24px',
                   background: 'transparent',
-                  border: '2px solid rgba(255, 255, 255, 0.5)'
+                  border: '1px solid rgba(255, 255, 255, 0.5)'
                 }}
               >
-                {/* Filled portion with white stripes */}
+                {/* Filled portion with translucent white */}
                 <div
                   className="h-full rounded-lg"
                   style={{
                     width: `${sellPressure}%`,
-                    background: `repeating-linear-gradient(
-                      45deg,
-                      transparent,
-                      transparent 6px,
-                      rgba(255, 255, 255, 0.3) 6px,
-                      rgba(255, 255, 255, 0.3) 8px
-                    )`
+                    background: 'rgba(255, 255, 255, 0.25)'
                   }}
                 />
               </div>
@@ -233,13 +339,13 @@ export default function Dashboard() {
                     width: '14px',
                     height: '14px',
                     background: 'rgba(255, 255, 255, 0.5)',
-                    border: '2px solid white'
+                    border: '1px solid white'
                   }}
                 />
                 {/* Vertical line connecting to bar */}
                 <div
                   style={{
-                    width: '2px',
+                    width: '1px',
                     height: '10px',
                     background: 'rgba(255, 255, 255, 0.6)'
                   }}
@@ -248,12 +354,12 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Execution Time Slider */}
-          <div className="flex-1">
+          {/* Timeline Slider */}
+          <div style={{ width: '220px' }}>
             {/* Value label */}
             <div className="mb-2 flex items-center gap-2">
               <span className="text-lg font-[family-name:var(--font-cormorant)]" style={{ color: '#2E3837' }}>
-                Execution timeline
+                Timeline
               </span>
               <span className="text-base font-[family-name:var(--font-inter)] font-semibold" style={{ color: '#2E3837' }}>
                 {executionTime} Days
@@ -265,7 +371,7 @@ export default function Dashboard() {
               {/* Slider input - full area */}
               <input
                 type="range"
-                min="1"
+                min="0"
                 max="30"
                 value={executionTime}
                 onChange={(e) => setExecutionTime(Number(e.target.value))}
@@ -291,21 +397,15 @@ export default function Dashboard() {
                   top: '24px',
                   height: '24px',
                   background: 'transparent',
-                  border: '2px solid rgba(255, 255, 255, 0.5)'
+                  border: '1px solid rgba(255, 255, 255, 0.5)'
                 }}
               >
-                {/* Filled portion with white stripes */}
+                {/* Filled portion with translucent white */}
                 <div
                   className="h-full rounded-lg"
                   style={{
                     width: `${(executionTime / 30) * 100}%`,
-                    background: `repeating-linear-gradient(
-                      45deg,
-                      transparent,
-                      transparent 6px,
-                      rgba(255, 255, 255, 0.3) 6px,
-                      rgba(255, 255, 255, 0.3) 8px
-                    )`
+                    background: 'rgba(255, 255, 255, 0.25)'
                   }}
                 />
               </div>
@@ -327,13 +427,13 @@ export default function Dashboard() {
                     width: '14px',
                     height: '14px',
                     background: 'rgba(255, 255, 255, 0.5)',
-                    border: '2px solid white'
+                    border: '1px solid white'
                   }}
                 />
                 {/* Vertical line connecting to bar */}
                 <div
                   style={{
-                    width: '2px',
+                    width: '1px',
                     height: '10px',
                     background: 'rgba(255, 255, 255, 0.6)'
                   }}
@@ -343,39 +443,50 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Heatmap */}
-        <div className="flex flex-col gap-4">
-          {/* Stats boxes */}
-          <div className="flex gap-3">
-            {['Daily Revenue', 'Price', 'Circulating Supply', 'Years'].map((label, i) => (
-              <div
-                key={i}
-                className="px-6 py-3 rounded-2xl backdrop-blur-3xl"
-                style={{
-                  background: 'linear-gradient(to bottom, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.18))',
-                  border: '1px solid rgba(255, 255, 255, 0.35)',
-                  boxShadow: `
-                    inset 0 1px 2px rgba(0, 0, 0, 0.04),
-                    inset 0 -1px 1px rgba(255, 255, 255, 0.25),
-                    0 2px 6px rgba(0, 0, 0, 0.04),
-                    0 4px 12px rgba(0, 0, 0, 0.02)
-                  `
-                }}
-              >
-                <div className="text-xs font-[family-name:var(--font-inter)] text-gray-600 mb-1">
-                  {label}
-                </div>
-                <div className="text-lg font-[family-name:var(--font-inter)] font-semibold" style={{ color: '#2E3837' }}>
-                  {i === 0 && displayStats.revenue}
-                  {i === 1 && displayStats.price}
-                  {i === 2 && displayStats.supply}
-                  {i === 3 && displayStats.years}
-                </div>
-              </div>
-            ))}
+        {/* Charts Page - Only show on Token page (page 0) */}
+        {activeMenuItem === 0 && (
+          <ChartsPage sellPressure={sellPressure} executionTime={executionTime} />
+        )}
+
+        {/* Heatmap - Only show on Buyback page (page 1) */}
+        {activeMenuItem === 1 && (
+        <div className="flex flex-col gap-4 relative mt-8">
+          {/* Tab */}
+          <div
+            className="absolute -top-8 left-0 px-6 py-2 backdrop-blur-3xl flex items-center transition-all duration-300 cursor-default"
+            onMouseEnter={() => setHoveredBuybackTab(true)}
+            onMouseLeave={() => setHoveredBuybackTab(false)}
+            style={{
+              background: hoveredBuybackTab
+                ? 'radial-gradient(circle at center, rgba(192, 211, 194, 0.35) 0%, rgba(192, 211, 194, 0.18) 50%, rgba(255, 255, 255, 0.15) 100%)'
+                : 'linear-gradient(to bottom, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.18))',
+              border: hoveredBuybackTab
+                ? '1px solid rgba(192, 211, 194, 0.4)'
+                : '1px solid rgba(255, 255, 255, 0.35)',
+              borderBottom: 'none',
+              borderTopLeftRadius: '12px',
+              borderTopRightRadius: '12px',
+              boxShadow: hoveredBuybackTab
+                ? `
+                  inset 0 1px 2px rgba(192, 211, 194, 0.08),
+                  inset 0 -1px 1px rgba(255, 255, 255, 0.3),
+                  0 3px 8px rgba(0, 0, 0, 0.05),
+                  0 6px 16px rgba(0, 0, 0, 0.03)
+                `
+                : `
+                  inset 0 1px 2px rgba(0, 0, 0, 0.04),
+                  inset 0 -1px 1px rgba(255, 255, 255, 0.25),
+                  0 2px 6px rgba(0, 0, 0, 0.04),
+                  0 4px 12px rgba(0, 0, 0, 0.02)
+                `
+            }}
+          >
+            <span className="text-sm font-[family-name:var(--font-cormorant)]" style={{ color: '#2E3837' }}>
+              Token Buyback
+            </span>
           </div>
 
-          {/* Heatmap grid */}
+          {/* Combined container with stats and heatmap */}
           <div
             className="px-6 py-4 rounded-2xl backdrop-blur-3xl"
             style={{
@@ -389,6 +500,58 @@ export default function Dashboard() {
               `
             }}
           >
+            {/* Stats boxes */}
+            <div className="flex gap-3 mb-4">
+              {['Daily Revenue', 'Price', 'Circulating Supply', 'Years to buyback'].map((label, i) => (
+                <div
+                  key={i}
+                  className="px-6 py-3 relative"
+                >
+                  <div className="text-xs font-[family-name:var(--font-inter)] text-gray-600 mb-1 flex items-center gap-1">
+                    {label}
+                    {i === 3 && (
+                      <div className="relative">
+                        <div
+                          onMouseEnter={() => setShowTooltip(true)}
+                          onMouseLeave={() => setShowTooltip(false)}
+                          className="cursor-help"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="#ffffff" viewBox="0 0 256 256">
+                            <path d="M140,180a12,12,0,1,1-12-12A12,12,0,0,1,140,180ZM128,72c-22.06,0-40,16.15-40,36v4a8,8,0,0,0,16,0v-4c0-11,10.77-20,24-20s24,9,24,20-10.77,20-24,20a8,8,0,0,0-8,8v8a8,8,0,0,0,16,0v-.72c18.24-3.35,32-17.9,32-35.28C168,88.15,150.06,72,128,72Zm104,56A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"></path>
+                          </svg>
+                        </div>
+                        {showTooltip && (
+                          <div
+                            className="absolute left-1/2 transform -translate-x-1/2 top-full mt-2 px-3 py-2 rounded-lg whitespace-nowrap z-50"
+                            style={{
+                              background: 'white',
+                              border: '2px solid #8FB99E',
+                              color: '#2E3837',
+                              fontSize: '11px',
+                              fontFamily: 'var(--font-inter)',
+                              fontWeight: 500,
+                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                              width: '280px',
+                              whiteSpace: 'normal'
+                            }}
+                          >
+                            Hyperliquid Assistance Fund is designed to allocate 97% of all trading fees towards purchasing $HYPE from the open market
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-lg font-[family-name:var(--font-inter)] font-semibold" style={{ color: '#2E3837' }}>
+                    {i === 0 && displayStats.revenue}
+                    {i === 1 && displayStats.price}
+                    {i === 2 && displayStats.supply}
+                    {i === 3 && displayStats.years}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Heatmap grid */}
             <div className="flex gap-2 items-start">
               {/* Y-axis label (rotated) */}
               <div className="flex items-center justify-center" style={{ width: '20px', alignSelf: 'stretch' }}>
@@ -418,10 +581,25 @@ export default function Dashboard() {
                 {/* Dotted crosshair lines */}
                 {hoveredCell && (() => {
                   // Calculate actual values based on position
-                  const revenue = (5.50 + (hoveredCell.col / 28) * (8.00 - 5.50)).toFixed(2);
-                  const price = (50 - (hoveredCell.row / 17) * (50 - 34)).toFixed(2);
-                  const intensity = (hoveredCell.row + hoveredCell.col) / (18 + 29 - 2);
-                  const years = (1.2 + intensity * 0.8).toFixed(2);
+                  const revenueNum = 5.50 + (hoveredCell.col / 28) * (8.00 - 5.50);
+                  const priceNum = 50 - (hoveredCell.row / 17) * (50 - 34);
+
+                  // Get current circulating supply from sliders
+                  const tokenUnlock = 134;
+                  const baseSupply = 79.46;
+                  let additionalSupply = 0;
+                  if (executionTime > 0) {
+                    const dailyUnlock = tokenUnlock / executionTime;
+                    additionalSupply = dailyUnlock * (sellPressure / 100);
+                  }
+                  const currentSupply = baseSupply + additionalSupply;
+
+                  // Calculate years using formula: (Price × Circulating Supply) / (Daily Revenue × 365)
+                  const yearsNum = (priceNum * currentSupply) / (revenueNum * 365);
+
+                  const revenue = revenueNum.toFixed(2);
+                  const price = priceNum.toFixed(2);
+                  const years = yearsNum.toFixed(2);
 
                   return (
                     <>
@@ -474,10 +652,27 @@ export default function Dashboard() {
                 {Array.from({ length: 18 }).map((_, rowIndex) => (
                   <div key={rowIndex} className="flex">
                     {Array.from({ length: 29 }).map((_, colIndex) => {
-                      // Generate sample data - diagonal gradient (top-left to bottom-right)
+                      // Calculate actual values for this cell
+                      const revenueNum = 5.50 + (colIndex / 28) * (8.00 - 5.50);
+                      const priceNum = 50 - (rowIndex / 17) * (50 - 34);
+
+                      // Get current circulating supply from sliders
+                      const tokenUnlock = 134;
+                      const baseSupply = 79.46;
+                      let additionalSupply = 0;
+                      if (executionTime > 0) {
+                        const dailyUnlock = tokenUnlock / executionTime;
+                        additionalSupply = dailyUnlock * (sellPressure / 100);
+                      }
+                      const currentSupply = baseSupply + additionalSupply;
+
+                      // Calculate years using formula: (Price × Circulating Supply) / (Daily Revenue × 365)
+                      const yearsNum = (priceNum * currentSupply) / (revenueNum * 365);
+
+                      // Color based on position (intensity) - original color scheme
                       const intensity = (rowIndex + colIndex) / (18 + 29 - 2);
 
-                      // Color palette from orange/red to blue (reversed)
+                      // Color palette from orange/red to blue (reversed) - original coloring
                       let r, g, b;
                       if (intensity < 0.5) {
                         // Orange/red to light blue
@@ -509,7 +704,7 @@ export default function Dashboard() {
                           }}
                         >
                           <span className="text-[8px] font-[family-name:var(--font-inter)] text-white opacity-80">
-                            {(1.2 + intensity * 0.8).toFixed(2)}
+                            {yearsNum.toFixed(2)}
                           </span>
                         </div>
                       );
@@ -549,11 +744,40 @@ export default function Dashboard() {
 
                   {/* Values beside gradient */}
                   <div className="flex flex-col justify-between ml-2">
-                    {[2.2, 2.0, 1.8, 1.6, 1.4, 1.2].map((val) => (
-                      <div key={val} className="text-xs font-[family-name:var(--font-inter)]" style={{ color: '#2E3837' }}>
-                        {val}
-                      </div>
-                    ))}
+                    {(() => {
+                      // Calculate min/max years across the heatmap
+                      const minRevenue = 5.50;
+                      const maxRevenue = 8.00;
+                      const minPrice = 34;
+                      const maxPrice = 50;
+
+                      // Get current circulating supply from sliders
+                      const tokenUnlock = 134;
+                      const baseSupply = 79.46;
+                      let additionalSupply = 0;
+                      if (executionTime > 0) {
+                        const dailyUnlock = tokenUnlock / executionTime;
+                        additionalSupply = dailyUnlock * (sellPressure / 100);
+                      }
+                      const currentSupply = baseSupply + additionalSupply;
+
+                      // Calculate min/max possible years
+                      const minYears = (minPrice * currentSupply) / (maxRevenue * 365);
+                      const maxYears = (maxPrice * currentSupply) / (minRevenue * 365);
+
+                      // Create 6 evenly distributed values from max to min (top to bottom)
+                      const legendValues = [];
+                      for (let i = 0; i < 6; i++) {
+                        const value = maxYears - (i / 5) * (maxYears - minYears);
+                        legendValues.push(value);
+                      }
+
+                      return legendValues.map((val, i) => (
+                        <div key={i} className="text-xs font-[family-name:var(--font-inter)]" style={{ color: '#2E3837' }}>
+                          {Math.round(val)}
+                        </div>
+                      ));
+                    })()}
                   </div>
                 </div>
               </div>
@@ -567,6 +791,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
