@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { fetchHypePriceWithCache } from '../utils/hyperliquid';
 
 interface ChartsPageProps {
   sellPressure?: number;
@@ -12,9 +13,27 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
   const [showActualNumbers, setShowActualNumbers] = useState(false);
   const [hoveredSlice, setHoveredSlice] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  const [showCurrentPrice, setShowCurrentPrice] = useState(false);
-  const [show24hVolume, setShow24hVolume] = useState(false);
+  const [showCurrentPrice, setShowCurrentPrice] = useState(true);
+  const [show24hVolume, setShow24hVolume] = useState(true);
   const [isDark, setIsDark] = useState(false);
+  const [hypePrice, setHypePrice] = useState<string>('32.40');
+  const [hypeVolume, setHypeVolume] = useState<string>('584.3');
+
+  // Fetch HYPE price from Hyperliquid API
+  useEffect(() => {
+    const fetchPrice = async () => {
+      const data = await fetchHypePriceWithCache();
+      if (data) {
+        setHypePrice(data.price);
+        setHypeVolume(data.volume24h);
+      }
+    };
+
+    fetchPrice();
+    // Refresh price every 30 seconds
+    const interval = setInterval(fetchPrice, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Listen for theme changes
   useEffect(() => {
@@ -364,7 +383,7 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
           }}
         >
           <span className="text-sm font-[family-name:var(--font-cormorant)]" style={{ color: textColor }}>
-            Token Price
+            Token Price Prediction
           </span>
         </div>
 
@@ -454,7 +473,7 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
                       Current Price
                     </span>
                     <span className="text-sm font-[family-name:var(--font-inter)] font-semibold" style={{ color: textColor }}>
-                      $32.40
+                      ${hypePrice}
                     </span>
                   </div>
                 </div>
@@ -475,7 +494,7 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
                       24H Volume
                     </span>
                     <span className="text-sm font-[family-name:var(--font-inter)] font-semibold" style={{ color: textColor }}>
-                      $584.3M
+                      ${hypeVolume}M
                     </span>
                   </div>
                 </div>

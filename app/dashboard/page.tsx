@@ -4,6 +4,8 @@ import Image from "next/image";
 import { useState, useEffect } from "react";
 import VerticalMenu from "../components/VerticalMenu";
 import ChartsPage from "../components/ChartsPage";
+import MarketsTable from "../components/MarketsTable";
+import GamesPage from "../components/GamesPage";
 
 export default function Dashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -791,6 +793,16 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+        )}
+
+        {/* Markets Page - Only show on Markets page (page 2) */}
+        {activeMenuItem === 2 && (
+          <MarketsTable />
+        )}
+
+        {/* Games Page - Only show on Games page (page 3) */}
+        {activeMenuItem === 3 && (
+          <GamesPage />
         )}
       </div>
     </div>
