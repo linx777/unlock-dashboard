@@ -17,8 +17,8 @@ export default function Home() {
 
   useEffect(() => {
     const calculateTimeLeft = () => {
-      // Target: November 29, 2025 2PM UTC
-      const targetDate = new Date('2025-11-29T14:00:00Z');
+      // Target: November 29, 2025 07:30 AM UTC
+      const targetDate = new Date('2025-11-29T07:30:00Z');
       const now = new Date();
       const difference = targetDate.getTime() - now.getTime();
 

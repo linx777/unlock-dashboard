@@ -57,8 +57,8 @@ export default function Dashboard() {
     return () => observer.disconnect();
   }, []);
 
-  // Target: November 29, 2025 2PM UTC
-  const targetDate = new Date('2025-11-29T14:00:00Z');
+  // Target: November 29, 2025 07:30 AM UTC
+  const targetDate = new Date('2025-11-29T07:30:00Z');
 
   // Start: Current time (beginning of today)
   const startDate = new Date();
@@ -90,7 +90,7 @@ export default function Dashboard() {
   // Calculate displayed stats based on selected cell or defaults
   const getDisplayStats = () => {
     // Calculate circulating supply based on sliders
-    const tokenUnlock = 134; // 134M tokens to unlock
+    const tokenUnlock = 314; // 314M tokens to unlock
     const baseSupply = 79.46; // Base circulating supply in millions
 
     // Calculate additional supply based on sliders
@@ -536,7 +536,7 @@ export default function Dashboard() {
                   const priceNum = 50 - (hoveredCell.row / 17) * (50 - 34);
 
                   // Get current circulating supply from sliders
-                  const tokenUnlock = 134;
+                  const tokenUnlock = 314;
                   const baseSupply = 79.46;
                   let additionalSupply = 0;
                   if (executionTime > 0) {
@@ -608,7 +608,7 @@ export default function Dashboard() {
                       const priceNum = 50 - (rowIndex / 17) * (50 - 34);
 
                       // Get current circulating supply from sliders
-                      const tokenUnlock = 134;
+                      const tokenUnlock = 314;
                       const baseSupply = 79.46;
                       let additionalSupply = 0;
                       if (executionTime > 0) {
@@ -703,7 +703,7 @@ export default function Dashboard() {
                       const maxPrice = 50;
 
                       // Get current circulating supply from sliders
-                      const tokenUnlock = 134;
+                      const tokenUnlock = 314;
                       const baseSupply = 79.46;
                       let additionalSupply = 0;
                       if (executionTime > 0) {

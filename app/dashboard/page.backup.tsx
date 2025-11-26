@@ -49,8 +49,8 @@ export default function Dashboard() {
     return () => observer.disconnect();
   }, []);
 
-  // Target: November 29, 2025 2PM UTC
-  const targetDate = new Date('2025-11-29T14:00:00Z');
+  // Target: November 29, 2025 07:30 AM UTC
+  const targetDate = new Date('2025-11-29T07:30:00Z');
 
   // Start: Current time (beginning of today)
   const startDate = new Date();

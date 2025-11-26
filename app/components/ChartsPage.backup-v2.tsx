@@ -27,7 +27,7 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
 
   // Calculate dynamic price data based on buyback parameters
   const calculatePriceImpact = () => {
-    const tokenUnlock = 134; // 134M tokens to unlock
+    const tokenUnlock = 314; // 314M tokens to unlock
     const baseSupply = 79.46; // Base circulating supply in millions
 
     // Real historical pattern from Nov 19-25 chart:
