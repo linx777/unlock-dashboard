@@ -15,10 +15,10 @@ export default function Dashboard() {
   const [isDark, setIsDark] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
 
-  // Update token value display to show 134 million
+  // Update token value display to show 314 million
   useEffect(() => {
     if (tokenLabel === 'Token value unlock') {
-      setTokenValue('$134 Million');
+      setTokenValue('$314 Million');
     }
   }, [tokenLabel]);
 
