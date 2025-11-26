@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { fetchHypePriceWithCache } from '../utils/hyperliquid';
+import { calculateFlexibleStressModel, MOCK_STRESS_DATA } from '../utils/stressModel';
 
 interface ChartsPageProps {
   sellPressure?: number;
@@ -15,6 +16,8 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [showCurrentPrice, setShowCurrentPrice] = useState(true);
   const [show24hVolume, setShow24hVolume] = useState(true);
+  const [showEstDrop, setShowEstDrop] = useState(true);
+  const [showEstDropTooltip, setShowEstDropTooltip] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [hypePrice, setHypePrice] = useState<string>('32.40');
   const [hypeVolume, setHypeVolume] = useState<string>('584.3');
@@ -62,49 +65,86 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
     { label: 'HIP-2', value: 0.01, tokens: 0.1, color: '#E8F0EC' },
   ];
 
-  // Calculate dynamic price data based on buyback parameters
+  // Calculate dynamic price data based on stress model
   const calculatePriceImpact = () => {
-    const tokenUnlock = 314; // 314M tokens to unlock
-    const baseSupply = 79.46; // Base circulating supply in millions
-
-    // Real historical pattern from Nov 19-25 chart:
-    // Nov 19: 38, Nov 21: Sharp drop to 32, Nov 22: Low at 30, Nov 23-24: Recovery to 31-32, Nov 25: 33
-    const historicalPattern = [
-      { date: '2025-11-19', basePrice: 38, label: 'Nov 19' },
-      { date: '2025-11-21', basePrice: 32, label: 'Nov 21' }, // Sharp unlock drop
-      { date: '2025-11-22', basePrice: 30, label: 'Nov 22' }, // Lowest point
-      { date: '2025-11-23', basePrice: 31, label: 'Nov 23' }, // Recovery
-      { date: '2025-11-25', basePrice: 33, label: 'Nov 25' }, // Current
-    ];
-
+    // Parse current price from hypePrice state (remove $ and convert to number)
+    const currentPrice = parseFloat(hypePrice);
+    
+    // If no user input (default state), show current price only
     if (executionTime === 0 || sellPressure === 0) {
-      // Natural scenario: Show historical pattern
-      return historicalPattern.map(point => ({
-        date: point.date,
-        y: point.basePrice
-      }));
+      const today = new Date();
+      return [{
+        date: today.toISOString().split('T')[0],
+        y: currentPrice
+      }];
     }
 
-    // With buyback intervention: reduce the impact of the drop
-    const buybackStrength = (executionTime / 30) * (sellPressure / 100);
-
-    return historicalPattern.map((point, index) => {
-      let adjustedPrice = point.basePrice;
-
-      if (index >= 1) { // After the initial price
-        // Calculate how much buybacks can mitigate the drop
-        // Lower sell pressure + faster execution = better price support
-        const priceSupport = (1 - buybackStrength) * 2; // Max 2x support
-        const naturalDrop = 38 - point.basePrice; // How much it dropped naturally
-        const mitigatedDrop = naturalDrop * (1 - (priceSupport * 0.3)); // Reduce drop by up to 30%
-        adjustedPrice = Math.round((38 - mitigatedDrop) * 100) / 100;
+    // Use the flexible stress model with user inputs
+    const stressInput = {
+      ...MOCK_STRESS_DATA,
+      event: {
+        ...MOCK_STRESS_DATA.event,
+        sell_ratio: sellPressure / 100, // Convert percentage to decimal
+        sell_days: executionTime
       }
+    };
 
-      return { date: point.date, y: adjustedPrice };
+    const stressResult = calculateFlexibleStressModel(stressInput);
+
+    // Generate price predictions for each day
+    const today = new Date();
+    const predictions = stressResult.daily.map((dayData) => {
+      const futureDate = new Date(today);
+      futureDate.setDate(today.getDate() + dayData.day - 1);
+      
+      // Calculate price based on cumulative impact
+      // Negative impact = price drops
+      const priceChange = currentPrice * (dayData.cumulativeImpact / 100);
+      const predictedPrice = Math.max(currentPrice - priceChange, 0.01); // Ensure price doesn't go negative
+      
+      return {
+        date: futureDate.toISOString().split('T')[0],
+        y: parseFloat(predictedPrice.toFixed(2))
+      };
     });
+
+    // Add current price as day 0
+    return [
+      { date: today.toISOString().split('T')[0], y: currentPrice },
+      ...predictions
+    ];
   };
 
   const lineData = calculatePriceImpact();
+
+  // Calculate estimated price drop from stress model
+  const calculateEstimatedDrop = (): { drop: string; details: any } => {
+    if (executionTime === 0 || sellPressure === 0) {
+      return { 
+        drop: '0.00', 
+        details: null 
+      };
+    }
+
+    const stressInput = {
+      ...MOCK_STRESS_DATA,
+      event: {
+        ...MOCK_STRESS_DATA.event,
+        sell_ratio: sellPressure / 100,
+        sell_days: executionTime
+      }
+    };
+
+    const stressResult = calculateFlexibleStressModel(stressInput);
+    const finalImpact = stressResult.final_cumulative_impact_percent;
+    
+    return {
+      drop: finalImpact.toFixed(2),
+      details: stressResult
+    };
+  };
+
+  const { drop: estimatedDrop, details: dropDetails } = calculateEstimatedDrop();
 
   // Text color helpers for dark mode
   const textColor = isDark ? '#FFFFFF' : '#2E3837';
@@ -154,17 +194,25 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
     };
   }
 
-  // Create line graph path
-  const maxY = Math.max(...lineData.map(d => d.y));
-  const minY = Math.min(...lineData.map(d => d.y));
-  const rangeY = maxY - minY;
+  // Create line graph path with dynamic Y-axis scaling
+  const dataMaxY = Math.max(...lineData.map(d => d.y));
+  const dataMinY = Math.min(...lineData.map(d => d.y));
+  
+  // Add padding to Y-axis (10% on each side) for better visualization
+  const yPadding = (dataMaxY - dataMinY) * 0.1;
+  const maxY = yPadding > 0 ? dataMaxY + yPadding : dataMaxY + dataMaxY * 0.1;
+  const minY = yPadding > 0 ? Math.max(0, dataMinY - yPadding) : Math.max(0, dataMinY - dataMinY * 0.1);
+  
+  // Handle edge case where all values are the same (single point or flat line)
+  const rangeY = maxY - minY || maxY * 0.2 || 10; // Fallback to 20% of value or 10 if value is 0
+  
   const width = 450;
   const height = 250;
   const padding = 40;
 
   const linePath = lineData
     .map((point, index) => {
-      const x = padding + (index / (lineData.length - 1)) * (width - padding * 2);
+      const x = padding + (lineData.length > 1 ? (index / (lineData.length - 1)) : 0.5) * (width - padding * 2);
       const y = height - padding - ((point.y - minY) / rangeY) * (height - padding * 2);
       return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
     })
@@ -173,12 +221,12 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
   // Create filled area path (same as line, but closed at bottom)
   const areaPath = lineData
     .map((point, index) => {
-      const x = padding + (index / (lineData.length - 1)) * (width - padding * 2);
+      const x = padding + (lineData.length > 1 ? (index / (lineData.length - 1)) : 0.5) * (width - padding * 2);
       const y = height - padding - ((point.y - minY) / rangeY) * (height - padding * 2);
       return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
     })
     .join(' ') +
-    ` L ${padding + (lineData.length - 1) / (lineData.length - 1) * (width - padding * 2)} ${height - padding}` +
+    ` L ${padding + (lineData.length > 1 ? 1 : 0.5) * (width - padding * 2)} ${height - padding}` +
     ` L ${padding} ${height - padding} Z`;
 
   return (
@@ -414,7 +462,7 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
             </svg>
           </div>
 
-          {/* Bottom Tab - Drop Icon */}
+          {/* Middle Tab - Volume Icon */}
           <div
             onClick={() => setShow24hVolume(!show24hVolume)}
             className="p-2 backdrop-blur-3xl flex items-center justify-center transition-all duration-300 cursor-pointer hover:scale-105"
@@ -438,6 +486,31 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
               <path d="M174,47.75a254.19,254.19,0,0,0-41.45-38.3,8,8,0,0,0-9.18,0A254.19,254.19,0,0,0,82,47.75C54.51,79.32,40,112.6,40,144a88,88,0,0,0,176,0C216,112.6,201.49,79.32,174,47.75ZM128,216a72.08,72.08,0,0,1-72-72c0-57.23,55.47-105,72-118,16.53,13,72,60.75,72,118A72.08,72.08,0,0,1,128,216Zm55.89-62.66a57.6,57.6,0,0,1-46.56,46.55A8.75,8.75,0,0,1,136,200a8,8,0,0,1-1.32-15.89c16.57-2.79,30.63-16.85,33.44-33.45a8,8,0,0,1,15.78,2.68Z"></path>
             </svg>
           </div>
+
+          {/* Bottom Tab - Trend Down Icon for Est. Drop */}
+          <div
+            onClick={() => setShowEstDrop(!showEstDrop)}
+            className="p-2 backdrop-blur-3xl flex items-center justify-center transition-all duration-300 cursor-pointer hover:scale-105"
+            style={{
+              background: 'linear-gradient(to right, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.18))',
+              border: '1px solid rgba(255, 255, 255, 0.35)',
+              borderLeft: 'none',
+              borderTopRightRadius: '8px',
+              borderBottomRightRadius: '8px',
+              boxShadow: `
+                inset 0 1px 2px rgba(0, 0, 0, 0.04),
+                inset 0 -1px 1px rgba(255, 255, 255, 0.25),
+                0 2px 6px rgba(0, 0, 0, 0.04),
+                0 4px 12px rgba(0, 0, 0, 0.02)
+              `,
+              width: '48px',
+              height: '48px',
+            }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#2E3837" viewBox="0 0 256 256">
+              <path d="M240,128a8,8,0,0,1-8,8H204.94l-37.78,75.58A8,8,0,0,1,160,216h-.4a8,8,0,0,1-7.08-5.14L95.35,60.76,63.28,131.31A8,8,0,0,1,56,136H24a8,8,0,0,1,0-16H50.85L88.72,44.69a8,8,0,0,1,14.76.46l57.51,151,31.85-63.71A8,8,0,0,1,200,128Z"></path>
+            </svg>
+          </div>
         </div>
 
         <div
@@ -455,8 +528,8 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
             height: '400px',
           }}
         >
-          {/* Price and Volume Displays */}
-          {(showCurrentPrice || show24hVolume) && (
+          {/* Price, Volume, and Est. Drop Displays */}
+          {(showCurrentPrice || show24hVolume || showEstDrop) && (
             <div className="absolute top-4 right-4 flex gap-2">
               {/* Current Price Display */}
               {showCurrentPrice && (
@@ -497,6 +570,94 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
                       ${hypeVolume}M
                     </span>
                   </div>
+                </div>
+              )}
+
+              {/* Estimated Drop Display */}
+              {showEstDrop && (
+                <div
+                  className="relative px-2 py-1 rounded-lg backdrop-blur-sm cursor-help"
+                  style={{
+                    background: 'rgba(143, 185, 158, 0.2)',
+                    border: '1.5px solid rgba(255, 255, 255, 0.6)',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+                  }}
+                  onMouseEnter={() => setShowEstDropTooltip(true)}
+                  onMouseLeave={() => setShowEstDropTooltip(false)}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-[family-name:var(--font-inter)]" style={{ color: textColorMuted, opacity: 0.6 }}>
+                      Est. Drop
+                    </span>
+                    <span className="text-sm font-[family-name:var(--font-inter)] font-semibold" style={{ color: textColor }}>
+                      {estimatedDrop}%
+                    </span>
+                  </div>
+
+                  {/* Tooltip */}
+                  {showEstDropTooltip && dropDetails && (
+                    <div
+                      className="absolute top-full right-0 mt-2 px-4 py-3 rounded-lg pointer-events-none z-50"
+                      style={{
+                        background: 'white',
+                        border: '2px solid #8FB99E',
+                        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15)',
+                        width: '280px',
+                      }}
+                    >
+                      <div className="space-y-2">
+                        {/* Title */}
+                        <div className="border-b border-gray-200 pb-2 mb-2">
+                          <span className="text-xs font-[family-name:var(--font-inter)] font-semibold" style={{ color: '#2E3837' }}>
+                            Price Drop Calculation
+                          </span>
+                        </div>
+
+                        {/* Parameters */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-[family-name:var(--font-inter)]" style={{ color: '#6B9080' }}>
+                              Unlock Value:
+                            </span>
+                            <span className="text-[10px] font-[family-name:var(--font-inter)] font-semibold" style={{ color: '#2E3837' }}>
+                              ${(dropDetails.params.unlockTotal / 1_000_000).toFixed(0)}M
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-[family-name:var(--font-inter)]" style={{ color: '#6B9080' }}>
+                              Sell Pressure:
+                            </span>
+                            <span className="text-[10px] font-[family-name:var(--font-inter)] font-semibold" style={{ color: '#2E3837' }}>
+                              {(dropDetails.params.sellRatio * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-[family-name:var(--font-inter)]" style={{ color: '#6B9080' }}>
+                              Timeline:
+                            </span>
+                            <span className="text-[10px] font-[family-name:var(--font-inter)] font-semibold" style={{ color: '#2E3837' }}>
+                              {dropDetails.params.sellDays} days
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Methodology */}
+                        <div className="border-t border-gray-200 pt-2 mt-2">
+                          <span className="text-[9px] font-[family-name:var(--font-inter)]" style={{ color: '#6B9080', lineHeight: '1.4' }}>
+                            Calculated using orderbook depth analysis, market volatility (σ={MOCK_STRESS_DATA.volatility.sigma_7d.toFixed(3)}), 
+                            order flow imbalance, and liquidity refill assumptions over the specified timeframe.
+                          </span>
+                        </div>
+
+                        {/* Formula hint */}
+                        <div className="bg-gray-50 px-2 py-1.5 rounded mt-2">
+                          <span className="text-[9px] font-[family-name:var(--font-inter)] font-mono" style={{ color: '#2E3837' }}>
+                            Impact = Σ(Daily Depth × Volatility × Flow Pressure)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -545,18 +706,41 @@ export default function ChartsPage({ sellPressure = 0, executionTime = 0 }: Char
             </text>
           ))}
 
-          {/* X-axis labels - show all dates for 5 days */}
-          {lineData.map((point, i) => (
-            <text
-              key={i}
-              x={padding + (i / (lineData.length - 1)) * (width - padding * 2)}
-              y={height - padding + 20}
-              textAnchor="middle"
-              style={{ fontSize: '10px', fill: textColor, opacity: 0.6 }}
-            >
-              {new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </text>
-          ))}
+          {/* X-axis labels - adaptive display to prevent overlap */}
+          {lineData.map((point, i) => {
+            // Determine label interval based on data length
+            let showLabel = false;
+            const dataLength = lineData.length;
+            
+            if (dataLength <= 5) {
+              // Show all labels for 5 days or less
+              showLabel = true;
+            } else if (dataLength <= 10) {
+              // Show every other label for 6-10 days
+              showLabel = i % 2 === 0 || i === dataLength - 1;
+            } else if (dataLength <= 15) {
+              // Show every 3rd label for 11-15 days
+              showLabel = i % 3 === 0 || i === dataLength - 1;
+            } else if (dataLength <= 20) {
+              // Show every 4th label for 16-20 days
+              showLabel = i % 4 === 0 || i === dataLength - 1;
+            } else {
+              // Show every 5th label for 21+ days
+              showLabel = i % 5 === 0 || i === dataLength - 1;
+            }
+            
+            return showLabel ? (
+              <text
+                key={i}
+                x={padding + (i / (lineData.length - 1)) * (width - padding * 2)}
+                y={height - padding + 20}
+                textAnchor="middle"
+                style={{ fontSize: '10px', fill: textColor, opacity: 0.6 }}
+              >
+                {new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </text>
+            ) : null;
+          })}
         </svg>
         </div>
       </div>

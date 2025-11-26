@@ -258,3 +258,41 @@ export function calculateFlexibleStressModel(
     final_cumulative_impact_percent: cumulativeImpact,
   };
 }
+
+
+export const MOCK_STRESS_DATA: StressModelInput = {
+  event: {
+    unlock_value_usd: 314000000,
+    cohort_type: "private_and_contributors"
+  },
+  orderbook_depth: {
+    "0.5%": 0,
+    "1%": 5670863.68,
+    "2%": 5670863.68,
+    "3%": 10621264.96,
+    "5%": 35944509.62,
+    "10%": 70092214.12
+  },
+  orderbook_L1: {
+    best_bid_price: 32,
+    best_bid_size_usd: 5670863.68,
+    best_ask_price: 33,
+    best_ask_size_usd: 4950401.28,
+    bid_ask_spread_percent: 3.076923076923077
+  },
+  liquidity: {
+    volume_24h: 444274736.7685499
+  },
+  market_structure: {
+    order_imbalance: 0.08859578516977286
+  },
+  flow_data: {
+    taker_buy_volume_24h: 3482.37794,
+    // Updated to realistic values to show sell strength impact
+    // 35% selling, 65% buying in this scenario
+    taker_sell_volume_24h: 1850.12 
+  },
+  volatility: {
+    sigma_7d: 0.027089500796139983
+  }
+};

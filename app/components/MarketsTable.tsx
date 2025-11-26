@@ -55,13 +55,13 @@ export default function MarketsTable() {
     const decimalMap: { [key: string]: number } = {
       'BTC': 0,
       'ETH': 1,
-      'DYDX': 4,
-      'INJ': 2,
-      'GMX': 2,
-      'SEI': 4,
+      'DYDX': 5,
+      'INJ': 4,
+      'GMX': 4,
+      'SEI': 5,
       'SUI': 4,
-      'ARB': 4,
-      'ENA': 4,
+      'ARB': 5,
+      'ENA': 5,
     };
     return decimalMap[token] ?? 4;
   };
